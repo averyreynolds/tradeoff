@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 app = FastAPI()
 
-from classes import Account
+from backend.classes import Account
 account = Account()
 
 class TradeRequest(BaseModel):
