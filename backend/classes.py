@@ -2,14 +2,16 @@
 import yfinance as yf
 
 class Stock:
+    # A class with a ticker, quantity of stock owned, as well as other data given by yfinance lib
     def __init__(self, ticker, quantity):
         self.ticker = ticker.upper()
         self.quantity = quantity
         self.purchase_price = self.get_current_price()
-        self.cost_basis = self.purchase_price * self.quantity if self.purchase_price is not None else 0
+        self.cost_basis = self.purchase_price * self.quantity if self.purchase_price is not None else 0     #avoiding NoneType
         self.current_price = self.purchase_price
 
     def get_current_price(self):
+        # Inputs stock ticker to return lastPrice from yfinance df
         stock = yf.Ticker(self.ticker)
         try:
             return stock.fast_info["lastPrice"]
@@ -17,6 +19,7 @@ class Stock:
             return None #when ticker DNE
 
     def market_value(self):
+        # Retrieves the most recent valuation of stock volume
         current_price = self.get_current_price()
         return current_price * self.quantity if current_price else 0
 
@@ -36,10 +39,12 @@ class Stock:
         return f"{self.ticker} | {self.quantity} | ${cost_str} | ${price_str} | {percent_str}%\n"
 
 class Portfolio:
+    # Characterizes all holdings of stocks
     def __init__(self):
         self.holdings = {}  #key: ticker, value: Stock
 
     def add_stock(self, ticker, quantity):
+        # If ticker is already in holdings, update quantity. Else, create new key-value pair
         ticker = ticker.upper()
         if ticker in self.holdings:
             stock = self.holdings[ticker]
@@ -49,12 +54,14 @@ class Portfolio:
             self.holdings[ticker] = Stock(ticker, quantity)
 
     def get_total_value(self):
+        # Returns the sum of every holding's market value
         value = 0
         for ticker in self.holdings:
             value += self.holdings[ticker].market_value()
         return value
 
     def refresh_prices(self):
+        # Creates dynamic updates of stock pricing
         for stock in self.holdings.values():
             stock.refresh_price()
 
@@ -65,6 +72,7 @@ class Portfolio:
         print(f"\nTotal Value: ${self.get_total_value():.2f}\n")
 
 class Account:
+    # Simulates an investing account, contains a portfolio of stocks and budgeted cash
     def __init__(self, budget = 10000):
         self.portfolio = Portfolio()
         self.cash = budget
@@ -74,6 +82,7 @@ class Account:
         self.portfolio.print_info()
 
     def buy_stock(self, ticker, quantity):
+        # If cost of order exceeds available cash, then raise exception. Else, add holding of stock and subtract from budget
         ticker = ticker.upper()
         stock_price = Stock(ticker, 0).get_current_price()
         cost = stock_price * quantity
@@ -83,6 +92,7 @@ class Account:
         self.cash -= cost
 
     def sell_stock(self, ticker, quantity):
+        # If quantity is greater than the order, then calculate profit and adjust current quantity held.
         ticker = ticker.upper()
         if ticker in self.portfolio.holdings:
             stock = self.portfolio.holdings[ticker]
