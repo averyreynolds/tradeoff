@@ -1,6 +1,6 @@
 # FastAPI Structure
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -30,6 +30,13 @@ def sell_stock(trade: TradeRequest):
         return {"message": f"Sold {trade.quantity} shares of {trade.ticker.upper()}"}
     except Exception as e:
         return {"error": str(e)}
+
+@app.post("/snapshot")
+def generate_snapshot(user_id:str, portfolio:dict= Body(...)):
+    return {
+        "message": f"Snapshot created for {user_id}",
+        "portfolio": portfolio
+    }
 
 @app.get("/portfolio")
 def view_portfolio():

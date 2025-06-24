@@ -100,3 +100,4 @@ class Account:
                 del self.portfolio.holdings[ticker]
         else:
             raise Exception("No such stock found.")
+
