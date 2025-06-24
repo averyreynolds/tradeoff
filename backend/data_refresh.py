@@ -1,5 +1,3 @@
-from classes import Stock, Account, Portfolio
-
 
 
 def generate_snapshot(user_id:str, portfolio:dict) -> dict:
