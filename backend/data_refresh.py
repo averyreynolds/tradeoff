@@ -1,5 +1,3 @@
-
-
 def generate_snapshot(user_id:str, portfolio:dict) -> dict:
     """
     Given a user ID and the user's portfolio,
