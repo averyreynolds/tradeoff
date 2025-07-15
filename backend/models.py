@@ -6,6 +6,7 @@ from datetime import datetime, date
 
 # Inputs
 class TradeRequest(BaseModel):
+    user_id: int
     ticker:str
     quantity:int
 
@@ -19,6 +20,10 @@ class ReturnRequest(BaseModel):
     portfolio: Dict[str, int]
 
 #Outputs
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
 class StockOut(BaseModel):
     ticker:str
     quantity:int
@@ -49,7 +54,8 @@ class Portfolio(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id")
     ticker: str
     quantity: float
-    created_at: datetime
+    purchase_price: float
+    created_at: datetime = Field(default_factory=datetime.now)
 
 class Snapshot(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

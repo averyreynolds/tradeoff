@@ -2,8 +2,9 @@
 
 from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException
-from sqlmodel import SQLModel, create_engine, Session, select
-from backend.models import TradeRequest, SnapshotRequest, ReturnRequest, SnapshotOut, PortfolioOut, StockOut, User, Portfolio, Snapshot
+from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import SQLModel, create_engine, Session, select, and_
+from backend.models import TradeRequest, SnapshotRequest, ReturnRequest, SignupRequest, SnapshotOut, PortfolioOut, StockOut, User, Portfolio, Snapshot
 from backend.classes import Account, Stock
 from backend.data_refresh import generate_returns, get_weights, generate_snapshot
 
@@ -15,29 +16,64 @@ def get_session():
         yield session
 app = FastAPI()
 engine = create_engine("sqlite:///database.db")
-
 account = Account()
 init_db()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],        # NEED TO CONFINE LATER
+    allow_credentials=True,
+    allow_methods=["*"],        # Allow backend to receive headers
+    allow_headers=["*"]         # Will need for authentication
+)
 
 @app.get("/")
 def root():
     return {"status": "Portfolio API is live"}
 
-@app.post("/user/")
-def create_user(username: str, session: Session = Depends(get_session)):
-    user = User(username=username, created_at= datetime.now())
-    session.add(user)
+@app.post("/signup")
+def signup(request: SignupRequest, session: Session = Depends(get_session)):
+    new_user = User(username=request.email, created_at=datetime.now())
+    session.add(new_user)
     session.commit()
-    session.refresh(user)
-    return user
+    session.refresh(new_user)
+    return {"user_id": new_user.id}
 
 @app.post("/buy")
-def buy_stock(trade: TradeRequest):
-    try:
-        account.buy_stock(trade.ticker, trade.quantity)
-        return {"message": f"Bought {trade.quantity} shares of {trade.ticker.upper()}"}
-    except Exception as e:
-        return {"error": str(e)}
+def buy_stock(trade: TradeRequest, session: Session = Depends(get_session)):
+    user = session.get(User, trade.user_id)
+    existing = session.exec(
+        select(Portfolio).where(
+            and_(
+                Portfolio.user_id == trade.user_id,
+                Portfolio.ticker == trade.ticker.upper()
+            )
+        )
+    ).first()
+
+    stock = Stock(ticker=trade.ticker.upper(), quantity=trade.quantity)
+    stock.refresh_price()
+
+    if existing:
+        total_quantity = existing.quantity + stock.quantity
+        total_cost = (
+            existing.purchase_price * existing.quantity + stock.current_price * stock.quantity
+        )
+        existing.quantity = total_quantity
+        existing.purchase_price = total_cost / total_quantity
+        session.add(existing)
+    else:
+        new_entry = Portfolio(
+            user_id=trade.user_id,
+            ticker=stock.ticker,
+            quantity=stock.quantity,
+            purchase_price=stock.current_price
+        )
+        session.add(new_entry)
+
+    session.commit()
+    return {"message": "Trade executed"}
+
 
 @app.post("/sell")
 def sell_stock(trade: TradeRequest):
@@ -69,10 +105,23 @@ def get_user_portfolio(user_id: int, session: Session = Depends(get_session)):
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    statement = select(Portfolio).where(Portfolio.user_id == user_id)
-    results = session.exec(statement).all()
+    stock_entries = session.exec(
+        select(Portfolio).where(Portfolio.user_id == user_id)
+    ).all()
 
-    return results
+    portfolio = []
+    for item in stock_entries:
+        stock = Stock(item.ticker, item.quantity)
+        stock.refresh_price()
+        portfolio.append({
+            "ticker": item.ticker,
+            "quantity": item.quantity,
+            "purchase_price": item.purchase_price,
+            "current_price": stock.current_price,
+            "market_value": stock.market_value()
+        })
+    return portfolio
+
 @app.post("/snapshot/preview", response_model=SnapshotOut)
 def create_snapshot(req: SnapshotRequest):
     portfolio= {ticker: Stock(ticker, qty) for ticker, qty in req.portfolio.items()}
@@ -80,7 +129,7 @@ def create_snapshot(req: SnapshotRequest):
     snapshot["date"]= str(snapshot["date"])
     return snapshot
 
-@app.get("/snapshot/store")
+@app.post("/snapshot/store")
 def store_snapshot(req: SnapshotRequest, session: Session = Depends(get_session)):
         snapshot_data = generate_snapshot(req.user_id, {
             ticker: Stock(ticker, quantity) for ticker, quantity in req.portfolio.items()
