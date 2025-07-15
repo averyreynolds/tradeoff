@@ -1,7 +1,7 @@
 # tradeoff
 ## **Vision:**
 > A competitive, educational trading app with data visualization and financial modeling tools primarily in Python.
-### My Tech Stack:
+### Tentative Tech Stack:
 | **Layer** | **Tool** |
 | ----------- | ----------- |
 | Backend | FastAPI |
