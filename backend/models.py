@@ -1,3 +1,4 @@
+# A collection of requests and classes for different API usages
 from pydantic import BaseModel
 from typing import Dict, Optional
 from sqlmodel import SQLModel, Field, JSON, Column
