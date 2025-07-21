@@ -1,4 +1,4 @@
-### tradeoff
+## **tradeoff**
 Work in progress
 ## **Vision:**
 > A competitive, educational trading app with data visualization and financial modeling tools primarily in Python.
