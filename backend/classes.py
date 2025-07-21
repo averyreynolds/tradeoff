@@ -6,9 +6,9 @@ class Stock:
     def __init__(self, ticker, quantity):
         self.ticker = ticker.upper()
         self.quantity = quantity
-        self.purchase_price = self.get_current_price()
+        self.purchase_price = self.get_current_price()      # price at buy
         self.cost_basis = self.purchase_price * self.quantity if self.purchase_price is not None else 0     #avoiding NoneType
-        self.current_price = self.purchase_price
+        self.current_price = self.purchase_price            # current refreshed price
 
     def get_current_price(self):
         # Inputs stock ticker to return lastPrice from yfinance df
@@ -34,9 +34,9 @@ class Stock:
 
     def __repr__(self):
         cost_str = f"{self.cost_basis:.2f}" if self.cost_basis else "N/A"
-        price_str = f"{self.market_value():.2f}" if self.market_value else "N/A"
+        mv_str = f"{self.market_value():.2f}"
         percent_str = f"{self.percent_gain():.2f}"
-        return f"{self.ticker} | {self.quantity} | ${cost_str} | ${price_str} | {percent_str}%\n"
+        return f"{self.ticker} | {self.quantity} | ${cost_str} | ${mv_str} | {percent_str}%\n"
 
 class Portfolio:
     # Characterizes all holdings of stocks
@@ -46,10 +46,11 @@ class Portfolio:
     def add_stock(self, ticker, quantity):
         # If ticker is already in holdings, update quantity. Else, create new key-value pair
         ticker = ticker.upper()
+        price = Stock(ticker,0).get_current_price()
         if ticker in self.holdings:
             stock = self.holdings[ticker]
             stock.quantity += quantity
-            stock.cost_basis += quantity * stock.get_current_price()
+            stock.cost_basis += quantity * price
         else:
             self.holdings[ticker] = Stock(ticker, quantity)
 

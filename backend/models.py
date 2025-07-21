@@ -12,19 +12,19 @@ class TradeRequest(BaseModel):
     quantity:int
 
 class SnapshotRequest(BaseModel):
-    user_id:str
-    portfolio: Dict[str, int]
+    user_id:int
+    portfolio: Dict[str, int]       # ticker gives quantity
 
 class ReturnRequest(BaseModel):
     snapshot_old:dict
     snapshot_new:dict
     portfolio: Dict[str, int]
 
-#Outputs
 class SignupRequest(BaseModel):
     email: str
     password: str
 
+#Outputs
 class StockOut(BaseModel):
     ticker:str
     quantity:int
@@ -37,7 +37,7 @@ class PortfolioOut(BaseModel):
     holdings: list[StockOut]
 
 class SnapshotOut(BaseModel):
-    user_id:str
+    user_id:int
     date:str
     prices: Dict[str, float]
 
@@ -50,7 +50,7 @@ class User(SQLModel, table=True):
     username: str
     created_at: datetime
 
-class Portfolio(SQLModel, table=True):
+class PortfolioDB(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")
     ticker: str

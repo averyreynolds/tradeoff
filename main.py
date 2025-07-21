@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import SQLModel, create_engine, Session, select, and_
-from backend.models import TradeRequest, SnapshotRequest, ReturnRequest, SignupRequest, SnapshotOut, PortfolioOut, StockOut, User, Portfolio, Snapshot
+from backend.models import TradeRequest, SnapshotRequest, ReturnRequest, SignupRequest, SnapshotOut, PortfolioOut, StockOut, User, PortfolioDB, Snapshot
 from backend.classes import Account, Stock
 from backend.data_refresh import generate_returns, get_weights, generate_snapshot
 
@@ -14,9 +14,11 @@ def init_db():
 def get_session():
     with Session(engine) as session:
         yield session
-app = FastAPI()
+
 engine = create_engine("sqlite:///database.db")
 account = Account()
+
+app = FastAPI()
 init_db()
 
 app.add_middleware(
@@ -26,44 +28,47 @@ app.add_middleware(
     allow_methods=["*"],        # Allow backend to receive headers
     allow_headers=["*"]         # Will need for authentication
 )
-
 @app.get("/")
 def root():
     return {"status": "Portfolio API is live"}
 
 @app.post("/signup")
 def signup(request: SignupRequest, session: Session = Depends(get_session)):
-    new_user = User(username=request.email, created_at=datetime.now())
+    new_user = User(username=request.email, created_at=datetime.now(), cash=10000.0)
     session.add(new_user)
     session.commit()
     session.refresh(new_user)
-    return {"user_id": new_user.id}
+    return {"user_id": new_user.id, "cash": new_user.cash}
 
+# --- Buy Stock ---
 @app.post("/buy")
 def buy_stock(trade: TradeRequest, session: Session = Depends(get_session)):
     user = session.get(User, trade.user_id)
+
+    stock = Stock(ticker=trade.ticker.upper(), quantity=trade.quantity)
+    stock.refresh_price()
+    total_cost = stock.current_price * trade.quantity
+
+    if total_cost > user.cash:
+        raise HTTPException(status_code=400, detail="Insufficient funds")
+
     existing = session.exec(
-        select(Portfolio).where(
+        select(PortfolioDB).where(
             and_(
-                Portfolio.user_id == trade.user_id,
-                Portfolio.ticker == trade.ticker.upper()
+                PortfolioDB.user_id == trade.user_id,
+                PortfolioDB.ticker == stock.ticker
             )
         )
     ).first()
 
-    stock = Stock(ticker=trade.ticker.upper(), quantity=trade.quantity)
-    stock.refresh_price()
-
     if existing:
         total_quantity = existing.quantity + stock.quantity
-        total_cost = (
-            existing.purchase_price * existing.quantity + stock.current_price * stock.quantity
-        )
+        total_cost_basis = (existing.purchase_price * existing.quantity) + total_cost
         existing.quantity = total_quantity
-        existing.purchase_price = total_cost / total_quantity
+        existing.purchase_price = total_cost_basis / total_quantity
         session.add(existing)
     else:
-        new_entry = Portfolio(
+        new_entry = PortfolioDB(
             user_id=trade.user_id,
             ticker=stock.ticker,
             quantity=stock.quantity,
@@ -71,10 +76,16 @@ def buy_stock(trade: TradeRequest, session: Session = Depends(get_session)):
         )
         session.add(new_entry)
 
+    user.cash -= total_cost
+    session.add(user)
+
     session.commit()
-    return {"message": "Trade executed"}
+    return {
+        "message": f"Bought {trade.quantity} shares of {stock.ticker} at {stock.current_price:.2f}",
+        "remaining_cash": user.cash
+    }
 
-
+# --- Sell Stock ---
 @app.post("/sell")
 def sell_stock(trade: TradeRequest):
     try:
@@ -100,27 +111,34 @@ def view_portfolio():
         ]
     )
 
-@app.get("/portfolio/{user_id}")
+# --- View User Portfolio ---
+@app.get("/portfolio/{user_id}", response_model=PortfolioOut)
 def get_user_portfolio(user_id: int, session: Session = Depends(get_session)):
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    stock_entries = session.exec(
-        select(Portfolio).where(Portfolio.user_id == user_id)
+    holdings = session.exec(
+        select(PortfolioDB).where(PortfolioDB.user_id == user_id)
     ).all()
 
-    portfolio = []
-    for item in stock_entries:
+    portfolio_items = []
+    for item in holdings:
         stock = Stock(item.ticker, item.quantity)
         stock.refresh_price()
-        portfolio.append({
-            "ticker": item.ticker,
-            "quantity": item.quantity,
-            "purchase_price": item.purchase_price,
-            "current_price": stock.current_price,
-            "market_value": stock.market_value()
-        })
-    return portfolio
+        mv = stock.market_value()
+        portfolio_items.append(
+            StockOut(
+                ticker=item.ticker,
+                quantity=item.quantity,
+                cost_basis=item.purchase_price * item.quantity,
+                market_value=mv,
+                percent_gain=((mv-(item.purchase_price * item.quantity))/(item.purchase_price * item.quantity)) * 100 if item.purchase_price else 0
+            )
+        )
+    return PortfolioOut(
+        cash=user.cash,
+        holdings=portfolio_items
+    )
 
 @app.post("/snapshot/preview", response_model=SnapshotOut)
 def create_snapshot(req: SnapshotRequest):
